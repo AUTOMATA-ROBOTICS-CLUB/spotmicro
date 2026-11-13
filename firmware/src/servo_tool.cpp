@@ -41,7 +41,8 @@ void outputsOff() {
 const char *channelName(int ch) {
     static char spare[24];
     if (ch < 0) return "all servos";
-    if (ch < SERVO_COUNT) return SERVO_NAMES[ch];
+    for (int j = 0; j < SERVO_COUNT; j++)
+        if (DEFAULT_CAL[j].channel == ch) return SERVO_NAMES[j];
     snprintf(spare, sizeof(spare), "ch %d (spare)", ch);
     return spare;
 }
@@ -53,8 +54,7 @@ void printState() {
 
 void help() {
     Serial.println("\nc <0-15> select | a all | p <pwm> set | + - ++ -- nudge | s sweep | o off | ? help");
-    for (int i = 0; i < SERVO_COUNT; i++) Serial.printf("  %2d %s\n", i, SERVO_NAMES[i]);
-    Serial.println("  12-15 spare");
+    for (int ch = 0; ch < PCA_CHANNELS; ch++) Serial.printf("  %2d %s\n", ch, channelName(ch));
     printState();
 }
 

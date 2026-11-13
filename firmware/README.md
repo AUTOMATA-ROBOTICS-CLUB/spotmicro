@@ -13,6 +13,7 @@ Install [PlatformIO](https://platformio.org/) (VS Code extension, or `pipx insta
 ```bash
 pio run -e i2c_scan -t upload -t monitor      # step 1
 pio run -e servo_tool -t upload -t monitor    # step 2
+pio run -e calibrate -t upload -t monitor     # step 3
 ```
 
 If the serial monitor stays empty and you're using the board's native USB port, uncomment
@@ -27,7 +28,7 @@ dimensions) live in `include/robot_config.h`.
 |---|---|---|---|
 | 1 | **I2C check**: the ESP32-S3 sees the PCA9685 at 0x40 | ✅ `i2c_scan` | `esp32/include/peripherals/i2c_bus.h` |
 | 2 | **Servos by hand**: move any servo from the serial monitor at 50 Hz | ✅ `servo_tool` | `peripherals/drivers/pca9685.h` |
-| 3 | **Calibration table**: centre, direction, ticks/degree per servo, saved in flash (Preferences) | | `peripherals/servo_controller.h` |
+| 3 | **Calibration table**: channel, centre, direction, ticks/degree per servo, saved in flash (Preferences) | ✅ `calibrate` | `peripherals/servo_controller.h` |
 | 4 | **One leg**: inverse kinematics puts a foot where you ask | | `include/kinematics.h` (`legIK`) |
 | 5 | **Stand**: all four legs hold a level pose; rest/stand transitions | | `motion_states/stand_state.h`, `rest_state.h` |
 | 6 | **Control link**: WiFi + web page / WebSocket for commands | | `src/main.cpp`, `app/` |
@@ -50,3 +51,25 @@ dimensions, servo strength and mass.
 
 Servos stay off after power-up until the first command. Remove the horns (or hold the robot up)
 before sweeping: the full range can drive a leg into the body.
+
+## calibrate commands
+
+Every joint's centre pulse puts it in the **reference pose**, which is the standing pose: hips level
+with the leg straight down, upper legs 58° back, knees bent 107° (the leg IK at the default height). Angles use the IK convention: hip 0 = straight down, femur 0 =
+vertical (negative = back), knee 0 = straight.
+
+| Command | Action |
+|---|---|
+| `j <0-11>` / `a` | select one joint / all joints |
+| `h` | selection to the standing pose |
+| `z` | selection to rest (body lowered to its minimum height) |
+| `g <deg>` | selection to a joint angle (`h`, `z`, `g` move at 60°/s) |
+| `+` `-` / `++` `--` | nudge the selected joint's centre by 1 / 10 ticks (the joint moves with it) |
+| `d` | flip the selected joint's direction |
+| `t <x>` | ticks per degree for the selection (MG996R ~2.2) |
+| `m <0-15>` | move the selected joint to another PCA9685 channel |
+| `l` | list the table, with the angle range each joint can reach inside 125–600 |
+| `w` / `r` / `x` | write to flash / reload from flash / reset to `DEFAULT_CAL` in `robot_config.h` |
+| `o` | outputs off |
+
+The table is loaded from flash at boot (`include/servo_cal.h`), so later steps use the saved values.

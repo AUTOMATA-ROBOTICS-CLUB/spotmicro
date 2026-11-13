@@ -97,13 +97,34 @@ Use the `servo_tool` firmware step (see `../firmware/README.md`). Always calibra
 same PWM value gives a ~20% different pulse at 60 Hz, so numbers found at another frequency don't
 carry over.
 
-1. Horns off. `a` (all servos), `p 306`: every servo goes to its nominal centre.
-2. Attach the horns and legs so every leg hangs straight down, shoulders level (the 25-tooth spline
-   allows ~14° steps; get close).
-3. Per servo: `c <n>`, then `+` / `-` until the joint is exactly at its zero position. Write down the
-   value — that is the servo's centre.
-4. Find each servo's direction (which way a higher PWM turns the joint) and its ticks per degree
-   (move 90° with a square: `(pwm_90 − pwm_0) / 90`, typically ~2.2 for MG996R).
+Reference pose = **standing pose** (every servo at its centre pulse): hips level with the leg
+straight down, upper legs **58° back** from vertical, knees bent **107°** (73° between upper and
+lower leg). These are the leg IK angles at the default body height, so the robot stands with
+every servo at its centre, and walking stays within about -40/+30° (femur) and -21/+28° (knee)
+of it.
+
+1. Horns off. `servo_tool`: `a` (all servos), `p 306`: every servo goes to its nominal centre.
+2. Attach the horns and legs close to the standing pose (the 25-tooth spline allows ~14° steps).
+   Hold the robot up so the legs hang free.
+3. Per servo: `c <n>`, then `+` / `-` until the joint is in the standing pose. Write down the
+   value: that is the servo's centre. Put the values in `DEFAULT_CAL` in
+   `firmware/include/robot_config.h`.
+4. Flash `calibrate`. Per joint (`j <n>`):
+   - `h`, then check the angle with a protractor; fix it with `+` / `-` (this moves the centre).
+   - femur: `g 0` should make the upper leg vertical. knee: `g 90` should make a right angle
+     between the leg parts. hip: `g 20` should tilt the leg 20°, mirrored legs the same way for
+     the same sign (which sign means "outward" is settled in step 4).
+   - Wrong way: `d`. Right way but too far / not far enough: adjust `t`, then `h` again.
+5. `l` to check each joint's reachable range, then `w` to save to flash.
+
+Our hand-measured standing pose (2026-11-12):
+
+| Leg | Hip | Femur | Knee |
+|---|---|---|---|
+| Front left | 306 | 180 | 400 |
+| Front right | 470 | 432 | 194 |
+| Rear left | 295 | 180 | 406 |
+| Rear right | 310 | 490 | 194 |
 
 ## Credits
 

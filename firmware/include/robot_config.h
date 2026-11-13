@@ -12,7 +12,7 @@
 constexpr uint8_t PCA9685_ADDR = 0x40;            // default address (A0-A5 pads not bridged)
 constexpr uint32_t PCA9685_OSC_HZ = 27000000;     // typical real oscillator of cheap boards
 constexpr float SERVO_FREQ_HZ = 50.0f;            // 50 Hz = 20 ms frame, standard for MG996R
-constexpr int SERVO_COUNT = 12;      // robot servos on channels 0-11
+constexpr int SERVO_COUNT = 12;      // robot servos (joints), normally on channels 0-11
 constexpr int PCA_CHANNELS = 16;     // 12-15 are spare (testing, or re-mapping a bad channel)
 
 // Pulse values are in PCA9685 ticks: 4096 per 20 ms frame, so 1 tick = 4.88 us.
@@ -22,12 +22,39 @@ constexpr uint16_t PWM_CENTER = 306;               // ~1.49 ms, nominal servo ce
 
 inline float ticksToMicros(uint16_t ticks) { return ticks * (1000000.0f / SERVO_FREQ_HZ) / 4096.0f; }
 
-// Channel -> joint (PCA9685 outputs 0-11): each leg is shoulder (hip), upper leg (femur), lower leg (knee)
+// Joint order (index 0-11): each leg is shoulder (hip), upper leg (femur), lower leg (knee).
+// Joint i is on PCA9685 channel i; to use a spare channel, change it in DEFAULT_CAL below.
 constexpr const char *SERVO_NAMES[SERVO_COUNT] = {
     "FL hip", "FL femur", "FL knee",  //
     "FR hip", "FR femur", "FR knee",  //
     "RL hip", "RL femur", "RL knee",  //
     "RR hip", "RR femur", "RR knee",
+};
+
+// ---- Servo calibration (step 3) ------------------------------------------------------------
+// Reference pose = standing pose: the leg IK at the default body height (148.6 mm hip -> foot
+// centre) gives hips level with the leg straight down, upper legs 58 deg back, knees bent 107 deg.
+// A joint's centre pulse puts it in this pose. Joint angles use the IK convention: hip 0 = leg
+// straight down, femur 0 = vertical (negative = back), knee 0 = straight (positive = bent).
+constexpr float REF_ANGLE[3] = {0.0f, -58.0f, 107.0f};  // hip, femur, knee (degrees)
+// Rest pose: body lowered to the minimum height (99 mm hip -> foot centre, as Leika's rest state).
+constexpr float REST_ANGLE[3] = {0.0f, -76.0f, 136.0f};
+constexpr float MOVE_DEG_PER_S = 60.0f;  // joint speed for pose changes, so the body doesn't drop
+
+struct ServoCal {
+    uint8_t channel;    // PCA9685 output
+    uint16_t center;    // pulse (ticks) at the reference (standing) pose
+    int8_t dir;         // +1: a bigger joint angle needs a bigger pulse, -1: smaller
+    float ticksPerDeg;  // ~2.2 for MG996R at 50 Hz
+};
+
+// Standing pose measured by hand with servo_tool (2026-11-12). Directions are mirrored guesses: check each one with the
+// calibrate step and save the result to flash, which then overrides this table.
+constexpr ServoCal DEFAULT_CAL[SERVO_COUNT] = {
+    {0, 306, 1, 2.2f},   {1, 180, 1, 2.2f},  {2, 400, 1, 2.2f},   // FL
+    {3, 470, -1, 2.2f},  {4, 432, -1, 2.2f}, {5, 194, -1, 2.2f},  // FR
+    {6, 295, 1, 2.2f},   {7, 180, 1, 2.2f},  {8, 406, 1, 2.2f},   // RL
+    {9, 310, -1, 2.2f},  {10, 490, -1, 2.2f}, {11, 194, -1, 2.2f}, // RR
 };
 
 // ---- Leg geometry (measured on the printed KDY0523 parts, metres) ---------------------------

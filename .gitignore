@@ -1,0 +1,12 @@
+# PlatformIO
+.pio/
+firmware/.vscode/
+
+# Python / uv
+.venv/
+__pycache__/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store

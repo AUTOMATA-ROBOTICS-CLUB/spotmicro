@@ -50,8 +50,8 @@ screws/nuts and 625ZZ bearings.
 |---|---|
 | VCC | **3V3** (not 5 V: keeps SDA/SCL at 3.3 V) |
 | GND | GND |
-| SDA | **GPIO47** |
-| SCL | **GPIO21** |
+| SDA | **GPIO21** |
+| SCL | **GPIO47** |
 | OE, header V+ | not connected |
 
 **Power:**

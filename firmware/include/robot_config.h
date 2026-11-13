@@ -2,10 +2,10 @@
 
 // ---- Wiring (ESP32-S3 WROOM camera board) ------------------------------------------------
 #ifndef SDA_PIN
-#define SDA_PIN 47
+#define SDA_PIN 21
 #endif
 #ifndef SCL_PIN
-#define SCL_PIN 21
+#define SCL_PIN 47
 #endif
 
 // ---- PCA9685 servo driver ------------------------------------------------------------------

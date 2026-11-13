@@ -2,7 +2,7 @@
 // Doubles as a calibration tool that needs no WiFi: find each servo's centre/limits and write them down.
 //
 // Commands:
-//   c <0-11>   select a servo channel          a        select all 12 channels
+//   c <0-15>   select a channel (12-15 spare)  a        select all 12 robot channels
 //   p <pwm>    set pulse (125-600 ticks)       + / -    nudge by 1      ++ / --   nudge by 10
 //   s          sweep the selection slowly between the limits (any command stops it)
 //   o          outputs off (servos go limp)    ?        show this help and the current state
@@ -38,14 +38,23 @@ void outputsOff() {
     outputsOn = false;
 }
 
+const char *channelName(int ch) {
+    static char spare[24];
+    if (ch < 0) return "all servos";
+    if (ch < SERVO_COUNT) return SERVO_NAMES[ch];
+    snprintf(spare, sizeof(spare), "ch %d (spare)", ch);
+    return spare;
+}
+
 void printState() {
-    Serial.printf("[%s] pwm %u (%.0f us)%s%s\n", selected < 0 ? "all servos" : SERVO_NAMES[selected], pwm,
+    Serial.printf("[%s] pwm %u (%.0f us)%s%s\n", channelName(selected), pwm,
                   ticksToMicros(pwm), outputsOn ? "" : "  (outputs off)", sweeping ? "  sweeping" : "");
 }
 
 void help() {
-    Serial.println("\nc <0-11> select | a all | p <pwm> set | + - ++ -- nudge | s sweep | o off | ? help");
+    Serial.println("\nc <0-15> select | a all | p <pwm> set | + - ++ -- nudge | s sweep | o off | ? help");
     for (int i = 0; i < SERVO_COUNT; i++) Serial.printf("  %2d %s\n", i, SERVO_NAMES[i]);
+    Serial.println("  12-15 spare");
     printState();
 }
 
@@ -71,7 +80,7 @@ void handle(String line) {
         setPwm(pwm + (line[0] == '+' ? step : -step));
     } else if (line[0] == 'c') {
         long ch = line.substring(1).toInt();
-        if (ch < 0 || ch >= SERVO_COUNT) return (void)Serial.println("channel must be 0-11");
+        if (ch < 0 || ch >= PCA_CHANNELS) return (void)Serial.println("channel must be 0-15");
         selected = ch;
     } else if (line[0] == 'p') {
         setPwm(line.substring(1).toInt());

@@ -12,7 +12,8 @@
 constexpr uint8_t PCA9685_ADDR = 0x40;            // default address (A0-A5 pads not bridged)
 constexpr uint32_t PCA9685_OSC_HZ = 27000000;     // typical real oscillator of cheap boards
 constexpr float SERVO_FREQ_HZ = 50.0f;            // 50 Hz = 20 ms frame, standard for MG996R
-constexpr int SERVO_COUNT = 12;
+constexpr int SERVO_COUNT = 12;      // robot servos on channels 0-11
+constexpr int PCA_CHANNELS = 16;     // 12-15 are spare (testing, or re-mapping a bad channel)
 
 // Pulse values are in PCA9685 ticks: 4096 per 20 ms frame, so 1 tick = 4.88 us.
 constexpr uint16_t PWM_MIN = 125;                  // ~0.61 ms, safe lower limit

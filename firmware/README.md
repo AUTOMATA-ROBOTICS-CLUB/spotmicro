@@ -41,7 +41,7 @@ dimensions, servo strength and mass.
 
 | Command | Action |
 |---|---|
-| `c <0-11>` / `a` | select one servo / all 12 |
+| `c <0-15>` / `a` | select one channel (12–15 are spares) / all 12 robot servos |
 | `p <pwm>` | set the pulse (125–600 ticks; 306 ≈ centre) |
 | `+` `-` / `++` `--` | nudge by 1 / 10 |
 | `s` | slow sweep between the limits (any command stops it) |

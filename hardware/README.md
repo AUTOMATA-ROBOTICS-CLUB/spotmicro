@@ -112,8 +112,8 @@ of it.
 4. Flash `calibrate`. Per joint (`j <n>`):
    - `h`, then check the angle with a protractor; fix it with `+` / `-` (this moves the centre).
    - femur: `g 0` should make the upper leg vertical. knee: `g 90` should make a right angle
-     between the leg parts. hip: `g 20` should tilt the leg 20°, mirrored legs the same way for
-     the same sign (which sign means "outward" is settled in step 4).
+     between the leg parts. hip: `g 20` should swing the foot 20° **outward**
+     (away from the body), on every leg.
    - Wrong way: `d`. Right way but too far / not far enough: adjust `t`, then `h` again.
 5. `l` to check each joint's reachable range, then `w` to save to flash.
 

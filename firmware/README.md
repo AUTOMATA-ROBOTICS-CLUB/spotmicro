@@ -43,7 +43,7 @@ dimensions, servo strength and mass.
 | Command | Action |
 |---|---|
 | `c <0-15>` / `a` | select one channel (12–15 are spares) / all 12 robot servos |
-| `p <pwm>` | set the pulse (125–600 ticks; 306 ≈ centre) |
+| `p <pwm>` | set the pulse (100–600 ticks; 306 ≈ centre) |
 | `+` `-` / `++` `--` | nudge by 1 / 10 |
 | `s` | slow sweep between the limits (any command stops it) |
 | `o` | outputs off (servos go limp) |
@@ -65,10 +65,11 @@ vertical (negative = back), knee 0 = straight.
 | `z` | selection to rest (body lowered to its minimum height) |
 | `g <deg>` | selection to a joint angle (`h`, `z`, `g` move at 60°/s) |
 | `+` `-` / `++` `--` | nudge the selected joint's centre by 1 / 10 ticks (the joint moves with it) |
+| `k <deg>` | mark "the joint is really at `<deg>` now"; two marks ≥ 30° apart set direction, ticks/degree and centre |
 | `d` | flip the selected joint's direction |
 | `t <x>` | ticks per degree for the selection (MG996R ~2.2) |
 | `m <0-15>` | move the selected joint to another PCA9685 channel |
-| `l` | list the table, with the angle range each joint can reach inside 125–600 |
+| `l` | list the table, with the angle range each joint can reach inside 100–600 |
 | `w` / `r` / `x` | write to flash / reload from flash / reset to `DEFAULT_CAL` in `robot_config.h` |
 | `o` | outputs off |
 

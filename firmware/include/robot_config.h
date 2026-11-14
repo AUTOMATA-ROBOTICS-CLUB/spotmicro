@@ -16,7 +16,7 @@ constexpr int SERVO_COUNT = 12;      // robot servos (joints), normally on chann
 constexpr int PCA_CHANNELS = 16;     // 12-15 are spare (testing, or re-mapping a bad channel)
 
 // Pulse values are in PCA9685 ticks: 4096 per 20 ms frame, so 1 tick = 4.88 us.
-constexpr uint16_t PWM_MIN = 125;                  // ~0.61 ms, safe lower limit
+constexpr uint16_t PWM_MIN = 100;                  // ~0.49 ms, lower limit (our MG996Rs run quietly down to here)
 constexpr uint16_t PWM_MAX = 600;                  // ~2.93 ms, safe upper limit
 constexpr uint16_t PWM_CENTER = 306;               // ~1.49 ms, nominal servo centre
 
@@ -48,13 +48,13 @@ struct ServoCal {
     float ticksPerDeg;  // ~2.2 for MG996R at 50 Hz
 };
 
-// Standing pose measured by hand with servo_tool (2026-11-12). Directions are mirrored guesses: check each one with the
-// calibrate step and save the result to flash, which then overrides this table.
+// Standing pose measured by hand with servo_tool, then directions and scales checked on the robot
+// with the calibrate step (2026-11-13). A table saved to flash overrides this one.
 constexpr ServoCal DEFAULT_CAL[SERVO_COUNT] = {
-    {0, 306, 1, 2.2f},   {1, 180, 1, 2.2f},  {2, 400, 1, 2.2f},   // FL
-    {3, 470, -1, 2.2f},  {4, 432, -1, 2.2f}, {5, 194, -1, 2.2f},  // FR
-    {6, 295, 1, 2.2f},   {7, 180, 1, 2.2f},  {8, 406, 1, 2.2f},   // RL
-    {9, 310, -1, 2.2f},  {10, 490, -1, 2.2f}, {11, 194, -1, 2.2f}, // RR
+    {0, 306, 1, 2.2f},  {1, 180, 1, 2.2f},   {2, 420, 1, 2.2f},    // FL
+    {3, 470, -1, 2.2f}, {4, 435, -1, 2.2f},  {5, 163, -1, 2.2f},   // FR
+    {6, 295, -1, 2.2f}, {7, 190, 1, 2.2f},   {8, 426, 1, 2.2f},    // RL
+    {9, 310, 1, 2.2f},  {10, 490, -1, 2.2f}, {11, 179, -1, 2.2f},  // RR
 };
 
 // ---- Leg geometry (measured on the printed KDY0523 parts, metres) ---------------------------

@@ -3,7 +3,7 @@
 //
 // Commands:
 //   c <0-15>   select a channel (12-15 spare)  a        select all 12 robot channels
-//   p <pwm>    set pulse (125-600 ticks)       + / -    nudge by 1      ++ / --   nudge by 10
+//   p <pwm>    set pulse (100-600 ticks)       + / -    nudge by 1      ++ / --   nudge by 10
 //   s          sweep the selection slowly between the limits (any command stops it)
 //   o          outputs off (servos go limp)    ?        show this help and the current state
 //

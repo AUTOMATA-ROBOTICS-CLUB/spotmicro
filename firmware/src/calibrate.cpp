@@ -12,6 +12,9 @@
 //   g <deg>    selection to a joint angle (h, z and g move slowly; the first one after power-up
 //              switches the servos on one by one)
 //   + / -      nudge the centre by 1 tick      ++ / --  by 10
+//   k <deg>    mark "this joint is really at <deg> now". Two marks at least 30 deg apart set the
+//              direction, ticks per degree and centre from the pulses: g near an angle you can
+//              check (straight, square), + / - until it's exact, k; then the same at a second angle
 //   d          flip direction                  t <x>    set ticks per degree
 //   m <0-15>   move the joint to another PCA9685 channel
 //   l          list the table and the angles each joint can reach
@@ -33,6 +36,12 @@ ServoCal cal[SERVO_COUNT];
 float angle[SERVO_COUNT];   // joint angle being sent now (degrees)
 float target[SERVO_COUNT];  // where the joint is heading
 bool on[SERVO_COUNT] = {};
+uint16_t sentPwm[SERVO_COUNT];  // pulse on the wire now
+struct Mark {
+    bool set;
+    float deg;
+    uint16_t pwm;
+} mark[SERVO_COUNT] = {};       // last 'k' per joint
 uint32_t lastMoveMs = 0;
 int selected = 0;           // joint, or -1 for all
 bool dirty = false;         // table changed since the last write/load
@@ -42,6 +51,7 @@ void drive(int j) {
     uint16_t pwm = constrain(lroundf(ticks), PWM_MIN, PWM_MAX);
     if (pwm != lroundf(ticks) && angle[j] == target[j]) Serial.printf("%s clamped to %u (safe range %u-%u)\n", SERVO_NAMES[j], pwm, PWM_MIN, PWM_MAX);
     pca.setPWM(cal[j].channel, 0, pwm);
+    sentPwm[j] = pwm;
     on[j] = true;
 }
 
@@ -87,9 +97,37 @@ void printState() {
 
 void help() {
     Serial.println("\nj <0-11> select | a all | h stand | z rest | g <deg> go | + - ++ -- nudge centre");
-    Serial.println("d flip dir | t <x> ticks/deg | m <0-15> channel | l list | w save | r reload | x defaults | o off");
+    Serial.println("k <deg> mark real angle (2 marks = auto dir, ticks/deg, centre) | d flip dir | t <x> ticks/deg");
+    Serial.println("m <0-15> channel | l list | w save | r reload | x defaults | o off");
     Serial.println("angles: hip 0 = straight down, femur 0 = vertical (- = back), knee 0 = straight");
     list();
+}
+
+// 'k': the selected joint is at deg with the pulse being sent now. With an earlier mark far enough
+// away, the two (angle, pulse) points give the line pulse = centre + dir * ticksPerDeg * (angle - ref).
+void markAngle(float deg) {
+    int j = selected;
+    if (!on[j] || angle[j] != target[j]) return (void)Serial.println("move the joint there first (g <deg>, + / -)");
+    Mark &m = mark[j];
+    if (m.set && fabsf(deg - m.deg) >= 30.0f) {
+        float slope = (float(sentPwm[j]) - m.pwm) / (deg - m.deg);  // ticks per degree, signed
+        if (fabsf(slope) < 1.0f || fabsf(slope) > 5.0f) {
+            Serial.printf("%.2f ticks/deg is not plausible for an MG996R - check both angles, mark again\n", fabsf(slope));
+            m = {true, deg, sentPwm[j]};
+            return;
+        }
+        ServoCal &c = cal[j];
+        c.dir = slope > 0 ? 1 : -1;
+        c.ticksPerDeg = fabsf(slope);
+        c.center = constrain(lroundf(sentPwm[j] + slope * (refAngle(j) - deg)), PWM_MIN, PWM_MAX);
+        angle[j] = target[j] = deg;  // the new line passes through the current pulse: no jump
+        dirty = true;
+        Serial.printf("%s: from %.0f and %.0f deg -> dir %+d, %.2f ticks/deg, centre %u ('w' to save)\n",
+                      SERVO_NAMES[j], m.deg, deg, c.dir, c.ticksPerDeg, c.center);
+    } else {
+        Serial.printf("marked %.0f deg at pulse %u - now mark a second angle at least 30 deg away\n", deg, sentPwm[j]);
+    }
+    m = {true, deg, sentPwm[j]};
 }
 
 bool needOne(const char *what) {
@@ -129,6 +167,10 @@ void handle(String line) {
         if (!on[selected]) angle[selected] = target[selected] = refAngle(selected);
         drive(selected);  // the joint moves with its centre, so you can line it up by eye
         dirty = true;
+    } else if (cmd == 'k') {
+        if (!needOne("mark its angle")) return;
+        if (arg.isEmpty()) return (void)Serial.println("usage: k <degrees>");
+        markAngle(arg.toFloat());
     } else if (line == "d") {
         if (!needOne("flip its direction")) return;
         cal[selected].dir = -cal[selected].dir;

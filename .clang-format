@@ -1,0 +1,3 @@
+# C/C++ formatting: LLVM style (https://llvm.org/docs/CodingStandards.html).
+# Format with: clang-format -i firmware/src/*.cpp firmware/include/*.h
+BasedOnStyle: LLVM

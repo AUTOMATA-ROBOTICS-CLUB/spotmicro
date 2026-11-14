@@ -22,6 +22,15 @@ If the serial monitor stays empty and you're using the board's native USB port, 
 Shared settings (pins, PCA9685 address, 50 Hz, safe PWM range, channel names, measured leg
 dimensions) live in `include/robot_config.h`.
 
+## Code style
+
+C++ follows the [LLVM coding style](https://llvm.org/docs/CodingStandards.html), set in
+`../.clang-format`. Format before committing:
+
+```bash
+clang-format -i src/*.cpp include/*.h     # or: uvx clang-format -i ...
+```
+
 ## Build order
 
 | Step | Goal | Status | Leika reference |

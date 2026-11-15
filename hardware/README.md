@@ -1,26 +1,34 @@
 # Hardware
 
-SpotMicro quadruped printed from **KDY0523's SpotMicro** (MG996R variants), with **12 × MG996R**
-servos, an **ESP32-S3** board and a **PCA9685** servo driver.
+SpotMicro quadruped printed from **Michael Kubina's SpotMicroESP32** with **robjk's reinforced
+shoulders** and medium rear cover, with **12 × MG996R** servos, an **ESP32-S3** board and a
+**PCA9685** servo driver.
 
 ## Printed parts (`print/`)
 
-Print the `_mg` versions (sized for MG996R) and the `non-mega_` covers (any board other than an
-Arduino Mega). Left (`L_`) and right (`R_`) parts are mirror images.
+The folder also holds KDY0523's original SpotMicro, which Kubina's design is derived from but not
+compatible with; those parts are not used. Counts are from `print/Kubina_parts.md` ("+ m" =
+printed mirrored).
 
 | Part | Qty | | Part | Qty |
 |---|---|---|---|---|
-| `I_shoulder_mg` (front/rear frame) | 2 | | `L_arm_joint_mg` / `R_arm_joint_mg` (shoulder bracket, holds hip servo) | 2 / 2 |
-| `O_shoulder` (outer frame plate) | 2 | | `L_arm_mg` / `R_arm_mg` (upper leg, holds femur servo) | 2 / 2 |
-| `non-mega_L_side_plate` / `R_side_plate` | 1 / 1 | | `L_arm_cover` / `R_arm_cover` (upper-leg shell) | 2 / 2 |
-| `plate` (electronics plate, drilled for a Mega) | 1 | | `L_wrist_mg` / `R_wrist_mg` (lower leg, holds knee servo) | 2 / 2 |
-| `non-mega_T_cover_mg` / `non-mega_B_cover_mg` | 1 / 1 | | `foot` | 4 |
-| `F_cover` (head) / `R_cover` (rear) | 1 / 1 | | `L_ultra_sonic` / `R_ultra_sonic` (HC-SR04 mounts) | 1 / 1 |
+| **Chassis** (Kubina) | | | **Legs** | |
+| `Inner_Shoulder`, `Outer_Shoulder` | 2, 2 | | `Limb_Top_Shell_with_BB_hole` (robjk) | 2 + 2 m |
+| `Top_Shoulder`, `Bottom_Shoulder` | 2, 2 | | `Limb_Bottom_Shell` | 2 + 2 m |
+| `Chassis_Side` | 2 | | `Limb_Servohorn_Mount_long_v4` | 2 + 2 m |
+| `Circuitry_Mountingplate_SZBK07` | 1 | | `Limb_Ball_Bearing_Mount_long_v4` | 2 + 2 m |
+| `LiPo_Mountingbracket_Front` / `_Middle` / `_Rear` | 1 each | | `Wrist`, `Wrist _Counterpart` (lower leg) | 2 + 2 m each |
+| **Shoulder joints** (robjk) | | | `Shoulder_Joint_Ball_Bearing_Pin` (knee) | 4 |
+| `Shoulder_Joint_Servomount_extended_BB` | 2 + 2 m | | `Foot_Tip` (TPU) | 4 |
+| `Shoulder_Joint_Servo_Cap_Extended` | 4 | | **Hull** (100% infill) | |
+| `Shoulder_Cover` | 4 | | `Front_Cover_Optimized`, `sensormount_esp32_cam`, `cameramount_esp32_cam` | 1 each |
+| `Shoulder_Joint_Ball_Bearing_Pin_M3x8` | 4 | | `Top_Cover_Split_Front` / `_Rear` | 1 / 1 |
+| | | | `Bottom_Cover_Split_Front` / `_Rear` | 1 / 1 |
+| | | | `Rear_Cover_Shell_Medium`, `Rear_Cover_Plate_Medium` (robjk) | 1 each |
 
-Optional **reinforced-shoulder remix** by robjk: `Shoulder_*`, `Limb_Top_Shell_with_BB_hole`,
-`Rear_Cover_*_Medium` (shorter rear cover with OLED + GX16 cut-outs). See `print/robjk_README.txt`.
-
-Printed parts weigh ~510 g at 20% infill (~480–600 g for 15–30%).
+Use the `_long_v4` knee mounts (Kubina's recommendation: the legs fold flat at rest). They are
+61.5 mm long; the normal ones (46.5 mm) give a 3 mm shorter upper leg than the simulation uses.
+The shoulder cover and extended servo cap are symmetric, so the same print fits both sides.
 
 ## Electronics and hardware
 
@@ -38,9 +46,9 @@ Printed parts weigh ~510 g at 20% infill (~480–600 g for 15–30%).
 | 14–16 AWG silicone wire, XT60 pairs, Dupont wires | – | |
 | Optional: GY-87 IMU, 2 × HC-SR04, 0.96" SSD1306, PAJ7620U2 | – | |
 
-Screws and bearings for the KDY design (from its README): 8 × M5×15, 40 × M4×20, 8 × M4×15,
-48 × M4 nut, 4 × M3×20, 28 × M3×10, 16 × M3 nut, 8 × F625zz flange bearing. The remix adds M3×20
-screws/nuts and 625ZZ bearings.
+Screws and bearings (Kubina's bill of materials, plus robjk's shoulders): 84 × M2×8 + nuts (servo
+horns, bearing pins), 80 × M3×8 + nuts, 64 × M3×20 + nuts, 12 × 625ZZ ball bearings (8 for Kubina's
+legs, 4 for the shoulder covers).
 
 ## Wiring
 
@@ -71,25 +79,28 @@ Add a 470–1000 µF capacitor across the PCA9685 screw terminal.
 | Leg | FL | FL | FL | FR | FR | FR | RL | RL | RL | RR | RR | RR |
 | Joint | hip | femur | knee | hip | femur | knee | hip | femur | knee | hip | femur | knee |
 
-Where the servos sit: the **hip** servo rides in the shoulder bracket (`arm_joint`), the **femur**
-servo in the top of the upper leg (`arm`), the **knee** servo in the lower leg (`wrist`).
+Where the servos sit: each servo rides in the link it moves, with its horn on the link above. The
+**hip** servo is in the shoulder joint servo mount (horn in the outer shoulder plate). The **femur**
+servo is in the upper leg (horn in the shoulder joint's servo cap). The **knee** servo is in the
+lower leg (horn in the knee servo-horn mount).
 
 ## Measured dimensions
 
-Measured on the printed parts (pivot holes, bearing seats and servo mounting ears found in the
-STLs; across-part distances from fitting the parts into an assembled model). These are the values
-the firmware and simulation use:
+Measured in Kubina's assembled model (servo gears, shoulder pins, foot-tip arc; averaged over the
+four legs), which the print parts fit to within ~0.2–0.8 mm. These are the values the firmware and
+simulation use:
 
 | | mm | SpotMicroESP32-Leika firmware |
 |---|---|---|
-| Body length (front ↔ rear femur axes) | 185.5 | 207.5 |
+| Body length (front ↔ rear femur axes) | 205.9 | 207.5 |
 | Body width (left ↔ right hip axes) | 78.0 | 78.0 |
-| Coxa (hip axis → leg plane, sideways) | 55.0 | 60.5 |
-| Coxa offset (hip axis → femur axis, down) | 10.75 | 10.0 |
-| Femur (femur shaft → knee) | 108.3 | 111.2 |
-| Tibia (knee → ground, leg straight) | 135.4 | 118.5 |
+| Coxa (hip axis → leg plane, sideways) | 60.9 | 60.5 |
+| Coxa offset (hip axis → femur axis, down) | 10.0 | 10.0 |
+| Femur (femur axis → knee axis) | 111.0 | 111.2 |
+| Tibia (knee axis → foot-tip arc centre) | 118.0 | 118.5 |
+| Foot tip radius (arc centre → ground) | 19.9 | – |
 
-Estimated total mass ~1.78 kg (body 689 g, each shoulder 76 g, upper leg 110 g, lower leg 86 g).
+Estimated total mass ~2.13 kg (body 871 g, each shoulder 93 g, upper leg 125 g, lower leg 98 g).
 
 ## Servo calibration
 
@@ -99,9 +110,9 @@ carry over.
 
 Reference pose = **standing pose** (every servo at its centre pulse): hips level with the leg
 straight down, upper legs **58° back** from vertical, knees bent **107°** (73° between upper and
-lower leg). These are the leg IK angles at the default body height, so the robot stands with
-every servo at its centre, and walking stays within about -40/+30° (femur) and -21/+28° (knee)
-of it.
+lower leg). These were the leg IK angles at the default body height; with the measured Kubina
+legs the IK gives 55° / 106° there, so standing at the default height is within ~3° of every
+servo's centre. Keep the reference as it is: the calibration table is relative to it.
 
 1. Horns off. `servo_tool`: `a` (all servos), `p 306`: every servo goes to its nominal centre.
 2. Attach the horns and legs close to the standing pose (the 25-tooth spline allows ~14° steps).
@@ -128,5 +139,6 @@ Our hand-measured standing pose (2026-11-12):
 
 ## Credits
 
-- SpotMicro design: **KDY0523** — https://www.thingiverse.com/thing:3445283 (CC BY)
+- SpotMicroESP32: **Michael Kubina** — https://github.com/michaelkubina/SpotMicroESP32 (GPL-3.0)
 - Reinforced shoulders / medium rear cover: **robjk** — https://www.thingiverse.com/thing:4937631 (CC BY)
+- Original SpotMicro: **KDY0523** — https://www.thingiverse.com/thing:3445283 (CC BY)

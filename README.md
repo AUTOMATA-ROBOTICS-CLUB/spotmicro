@@ -1,6 +1,7 @@
 # SpotMicro — Automata Robotics Club
 
-A SpotMicro quadruped robot: 3D-printed KDY0523 body, 12 × MG996R servos, ESP32-S3 + PCA9685, built
+A SpotMicro quadruped robot: 3D-printed SpotMicroESP32 body (Michael Kubina) with
+robjk's reinforced shoulders, 12 × MG996R servos, ESP32-S3 + PCA9685, built
 step by step with [SpotMicroESP32-Leika](https://github.com/runeharlyk/SpotMicroESP32-Leika) as the
 reference design.
 

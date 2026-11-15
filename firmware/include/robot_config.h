@@ -41,11 +41,13 @@ constexpr const char *SERVO_NAMES[SERVO_COUNT] = {
 };
 
 // ---- Servo calibration (step 3) ---------------------------------------------
-// Reference pose = standing pose: the leg IK at the default body height
-// (148.6 mm hip -> foot centre) gives hips level with the leg straight down,
-// upper legs 58 deg back, knees bent 107 deg. A joint's centre pulse puts it in
-// this pose. Joint angles use the IK convention: hip 0 = leg straight down,
-// femur 0 = vertical (negative = back), knee 0 = straight (positive = bent).
+// Reference pose = standing pose: hips level with the leg straight down, upper
+// legs 58 deg back, knees bent 107 deg (the leg IK at ~148 mm hip -> foot
+// centre; the measured Kubina legs give -55/106 there). A joint's centre pulse
+// puts it in this pose, so these values stay fixed: the calibration table is
+// relative to them. Joint angles use the IK convention: hip 0 = leg straight
+// down, femur 0 = vertical (negative = back), knee 0 = straight (positive =
+// bent).
 constexpr float REF_ANGLE[3] = {0.0f, -58.0f, 107.0f}; // hip, femur, knee (deg)
 // Rest pose: body lowered to the minimum height (99 mm hip -> foot centre, as
 // Leika's rest state).
@@ -70,12 +72,13 @@ constexpr ServoCal DEFAULT_CAL[SERVO_COUNT] = {
     {9, 310, 1, 2.2f},  {10, 490, -1, 2.2f}, {11, 179, -1, 2.2f}, // RR
 };
 
-// ---- Leg geometry (measured on the printed KDY0523 parts, metres) -----------
-// Used from step 4 (leg IK) on. See hardware/README.md for how these were
-// measured.
-constexpr float COXA = 0.055f;          // hip axis -> leg plane, sideways
-constexpr float COXA_OFFSET = 0.01075f; // hip axis -> femur axis, down
-constexpr float FEMUR = 0.1083f;        // femur axis -> knee
-constexpr float TIBIA = 0.1354f;        // knee -> ground contact, leg straight
-constexpr float BODY_L = 0.1855f;       // front <-> rear femur axes
-constexpr float BODY_W = 0.078f;        // left <-> right hip axes
+// ---- Leg geometry (Kubina's SpotMicroESP32 + robjk shoulders, metres) -------
+// Used from step 4 (leg IK) on. Measured in Kubina's assembled model, see
+// simulation/README.md.
+constexpr float COXA = 0.0609f;        // hip axis -> leg plane, sideways
+constexpr float COXA_OFFSET = 0.010f;  // hip axis -> femur axis, down
+constexpr float FEMUR = 0.111f;        // femur axis -> knee axis
+constexpr float TIBIA = 0.118f;        // knee axis -> foot-tip arc centre
+constexpr float FOOT_RADIUS = 0.0199f; // foot-tip arc centre -> ground
+constexpr float BODY_L = 0.2059f;      // front <-> rear femur axes
+constexpr float BODY_W = 0.078f;       // left <-> right hip axes

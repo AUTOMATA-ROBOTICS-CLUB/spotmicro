@@ -1,14 +1,22 @@
-"""Place the printed SpotMicro parts (KDY0523 SpotMicro, MG996R variants) on the simulation skeleton.
+"""Place the printed SpotMicroESP32 parts on the simulation skeleton.
 
-The print STLs are separate parts in print orientation. The SpotMicroESP32-Leika web controller's
-model (`reference/web_model_stl.zip`, from its app/static/stl.zip) contains simplified copies of the same parts already
-assembled, so each print part is fitted onto its web counterpart (point-to-point ICP, 24 axis
-orientations), giving its assembled pose. Each part is then anchored on its own pivot feature
-(servo shaft, bearing pin, ...) so it sits exactly on the simulated joint axes.
+The robot: Michael Kubina's SpotMicroESP32 (https://github.com/michaelkubina/SpotMicroESP32, GPL-3.0; long
+knee mounts, SZBK07 electronics plate) with robjk's reinforced shoulders and medium rear cover
+(https://www.thingiverse.com/thing:4937631, CC BY), and MG996R servos.
 
-Writes `print_parts.json` (per part: link, mesh pose in the link frame, 20%-infill mass properties)
-and copies the used STLs into `meshes/`. `generate_scene.py` reads that JSON; this script only
-needs re-running if the parts or the skeleton change.
+Kubina's assembled model and robjk's FreeCAD files (`reference/assemblies.zip`, made by
+`extract_assembly.py`) hold the parts in their assembled poses. Each print STL is fitted onto its
+counterpart there (point-to-point ICP, 24 axis orientations); robjk parts that replace a Kubina part are
+fitted onto that part. The extended servo cap and shoulder cover have no Kubina counterpart: they keep their
+pose relative to the limb shell from robjk's assembly, turned about the femur axis so the cap's arm points
+up (onto the servo mount's extension), as on robjk's robot.
+
+The joint axes and feet are measured in the same assembly (servo gears, shoulder pins, foot-tip arc) and
+printed next to the skeleton constants in src.robot.firmware_gait, which they should match.
+
+Writes `print_parts.json` (per part: link, mesh pose in the link frame, mass properties) and copies the used
+STLs into `meshes/`, with mirrored copies for the right legs. `generate_scene.py` reads that JSON; this
+script only needs re-running if the parts or the skeleton change.
 
     uv run --with trimesh python -m src.resources.spotmicro_esp32.fit_print_meshes [PRINT_STL_DIR]
 
@@ -20,24 +28,63 @@ import itertools
 import json
 import math
 import os
-import shutil
 import sys
 import zipfile
 
 import numpy as np
 import trimesh
-from scipy.spatial import cKDTree
+from scipy.spatial import ConvexHull, cKDTree
 
-from src.robot.firmware_gait import COXA, COXA_OFFSET, FEMUR, TIBIA, HIP_POS, LEG_SIDE
+from src.robot import firmware_gait as fg
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", "..", "..", ".."))
-WEB_ZIP = os.path.join(HERE, "reference", "web_model_stl.zip")
+REF_ZIP = os.path.join(HERE, "reference", "assemblies.zip")
 PRINT_DIR = sys.argv[1] if len(sys.argv) > 1 else os.path.join(REPO, "hardware", "print")
 
-R_URDF = np.array([[0.0, 1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])  # URDF (fwd, left, up) -> sim
-MIRROR_X = np.diag([-1.0, 1.0, 1.0])                                         # sim left <-> right
-PLA_DENSITY, SHELL_CM, INFILL = 1.24, 0.10, 0.20                             # g/cm3, wall thickness, infill
+R_ASM = np.array([[0.0, 1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])  # assembly (fwd, left, up) -> sim
+MIRROR_X = np.diag([-1.0, 1.0, 1.0])                                     # sim left <-> right
+PLA_DENSITY, SHELL_CM = 1.24, 0.10                                       # g/cm3, wall thickness
+INFILL, HULL_INFILL = 0.20, 1.0                                          # Kubina prints the hull solid
+HULL = ("Front_Cover", "Rear_Cover", "Top_Cover", "Bottom_Cover")
+
+# Front-left leg: (print STL, sim link, assembly solid it replaces). Right legs use mirrored copies.
+LEG_PARTS = [
+    ("Shoulder_Joint_Servomount_extended_BB", "hip", "Shoulder_Joint_Servomount"),
+    ("Limb_Top_Shell_with_BB_hole", "femur", "Limb_Top_Shell"),
+    ("Limb_Bottom_Shell", "femur", "Limb_Bottom_Shell"),
+    ("Limb_Servohorn_Mount_long_v4", "femur", "Limb_Servohorn_Mount_long_v005"),
+    ("Limb_Ball_Bearing_Mount_long_v4", "femur", "Limb_Ball_Bearing_Mount_long_v4"),
+    ("Wrist", "tibia", "Wrist"),
+    ("Wrist _Counterpart", "tibia", "Wrist_Counterpart"),
+    ("Foot_Tip", "tibia", "Foot_Tip"),
+]
+# robjk shoulder parts placed from robjk's assembly: (print STL, solid there); both ride on the hip link
+ROBJK_SHOULDER = [("Shoulder_Joint_Servo_Cap_Extended", "Shoulder_Joint_Servohorn_Cap"),
+                  ("Shoulder_Cover", "Shoulder Cover")]
+# servo of each link: (assembly servo body, its output gear)
+LEG_SERVOS = {"hip": ("MG996R004", "Gear005"), "femur": ("MG996R002", "Gear003"), "tibia": ("MG996R001", "Gear002")}
+# Body: (print STL, assembly solid). The assembly's bottom cover halves are labelled the other way round.
+BODY_PARTS = [
+    ("Inner_Shoulder", "Inner_Shoulder001"), ("Inner_Shoulder", "Inner_Shoulder"),
+    ("Outer_Shoulder", "Outer_Shoulder"), ("Outer_Shoulder", "Outer_Shoulder001"),
+    ("Top_Shoulder", "Top_Shoulder001"), ("Top_Shoulder", "Top_Shoulder"),
+    ("Bottom_Shoulder", "Bottom_Shoulder001"), ("Bottom_Shoulder", "Bottom_Shoulder"),
+    ("Chassis_Side", "Chassis_Side"), ("Chassis_Side", "Chassis_Side001"),
+    ("Front_Cover_Optimized", "Front_Cover_Optimized"),
+    ("sensormount_esp32_cam", "Sensormount"), ("cameramount_esp32_cam", "Cameramount"),
+    ("Top_Cover_Split_Front", "Top_Cover_Split_Front"), ("Top_Cover_Split_Rear", "Top_Cover_Split_Rear"),
+    ("Bottom_Cover_Split_Front", "Bottom_Cover_Split_Rear"),
+    ("Bottom_Cover_Split_Rear", "Bottom_Cover_Split_Front"),
+    ("Rear_Cover_Shell_Medium", "Rear_Cover"),
+]
+# the assembly only has a flat template of the electronics plate: matched by its outline
+PLATE = ("Circuitry_Mountingplate_SZBK07", "Circuitboard Mount (Template)")
+# robjk's back plate: placed from robjk's rear assembly, relative to the shell
+REAR_PLATE = ("Rear_Cover_Plate_Medium", "Rear_Cover_Plate_medium", "Rear_Cover_Shell_medium")
+# not in the assembly (inside the body): mass only, lumped at the body centre
+HIDDEN = ["LiPo_Mountingbracket_Front", "LiPo_Mountingbracket_Middle", "LiPo_Mountingbracket_Rear"]
+LEGS = {"fl": "FL Leg", "fr": "FR Leg", "rl": "RL Leg", "rr": "RR LEG"}
 
 
 def T(R=np.eye(3), t=(0, 0, 0)):
@@ -45,34 +92,11 @@ def T(R=np.eye(3), t=(0, 0, 0)):
     return M
 
 
-def rpy(r, p, y):
-    Rz = np.array([[math.cos(y), -math.sin(y), 0], [math.sin(y), math.cos(y), 0], [0, 0, 1]])
-    Ry = np.array([[math.cos(p), 0, math.sin(p)], [0, 1, 0], [-math.sin(p), 0, math.cos(p)]])
-    Rx = np.array([[1, 0, 0], [0, math.cos(r), -math.sin(r)], [0, math.sin(r), math.cos(r)]])
-    return Rz @ Ry @ Rx
-
-
-# ---------------------------------------------------------------------------------------------
-# Web model, front-left leg + body, assembled in the URDF frame (mm). Values from the xacro.
-# ---------------------------------------------------------------------------------------------
-_HIP = np.array([93.0, 39.0, 0.0]); _LEG = _HIP + [0, 55, 0]; _KNEE = _LEG + [0, 0, -107.5]; _TOE = _KNEE + [0, 0, -130]
-WEB_POSE = {
-    "lshoulder": (_HIP, (0, 0, math.pi), (0.135, 0.015, -0.01)),
-    "larm": (_LEG, (0, -0.139, math.pi), (0.130, -0.040, -0.025)),
-    "larm_cover": (_LEG, (0, -0.139, math.pi), (0.130, -0.040, -0.025)),
-    "lfoot": (_KNEE, (0, 0, math.pi), (0.120, -0.04, 0.1)),
-    "foot": (_TOE, (0, -0.4001, math.pi), (0.0, 0.01, 0.015)),
-    "mainbody": (np.zeros(3), (0, 0, 0), (-0.042, -0.055, -0.010)),
-    "backpart": (np.zeros(3), (0, 0, math.pi), (0.04, 0.055, -0.010)),
-    "frontpart": (np.zeros(3), (0, 0, math.pi), (0.040, 0.055, -0.010)),
-}
-
-
-def web_mesh(name, zf):
-    org, r, xyz = WEB_POSE[name]
-    m = trimesh.load(io.BytesIO(zf.read(f"stl/{name}.stl")), file_type="stl", force="mesh")
-    m.apply_transform(T(rpy(*r), np.array(xyz) * 1000 + org))
-    return m
+def _rot(axis, a):
+    """Rotation by `a` about a unit `axis`."""
+    x, y, z = axis
+    K = np.array([[0, -z, y], [z, 0, -x], [-y, x, 0]])
+    return np.eye(3) + math.sin(a) * K + (1 - math.cos(a)) * K @ K
 
 
 # ---------------------------------------------------------------------------------------------
@@ -93,7 +117,7 @@ def _kabsch(P, Q):
 def _icp(pts, tree, tpts, M, iters):
     for _ in range(iters):
         d, i = tree.query(pts @ M[:3, :3].T + M[:3, 3])
-        keep = d <= np.percentile(d, 90)  # trim: web meshes contain extra parts (servos, merged pieces)
+        keep = d <= np.percentile(d, 90)  # trim: remixed parts differ from their reference in places
         M = _kabsch(pts[keep], tpts[i[keep]])
     d, _ = tree.query(pts @ M[:3, :3].T + M[:3, 3])
     return M, d
@@ -120,162 +144,223 @@ def load(name):
     return trimesh.load(os.path.join(PRINT_DIR, f"{name}.stl"), force="mesh")
 
 
-def mirrored(m):
-    m = m.copy(); m.apply_transform(T(MIRROR_X)); m.invert()
-    return m
+class Reference:
+    """The assembled solids of `reference/assemblies.zip`."""
+
+    def __init__(self):
+        self.zf = zipfile.ZipFile(REF_ZIP)
+        self.index = json.loads(self.zf.read("index.json"))
+
+    def find(self, label, source="kubina", within=None):
+        hits = [e for e in self.index if e["source"] == source and e["label"] == label
+                and (within is None or within in e["path"])]
+        assert len(hits) == 1, f"{label!r} in {within!r}: {len(hits)} matches"
+        return trimesh.load(io.BytesIO(self.zf.read(hits[0]["file"])), file_type="stl")
+
+    def leg_solids(self, leg, prefix):
+        return [(e["path"], trimesh.load(io.BytesIO(self.zf.read(e["file"])), file_type="stl"))
+                for e in self.index if LEGS[leg] in e["path"] and e["label"].startswith(prefix)]
 
 
 # ---------------------------------------------------------------------------------------------
-# Pivot features measured on the parts (part coordinates, mm) -- see the measurement notes in
-# the simulation README. "shaft" points lie on an axis; their position along that axis is free.
+# Skeleton measured in the assembly (mm, assembly frame)
 # ---------------------------------------------------------------------------------------------
-ARM_JOINT_FEMUR_DISC = [36.5, 10.25, 20.25]  # L_arm_joint_mg: femur-servo horn disc centre (femur axis)
-ARM_FEMUR_SHAFT = [10.0, 6.0, 9.5]           # L_arm_mg: femur servo shaft (pocket ears at Z -4 / 44.5)
-ARM_KNEE_EYE = [-3.82, -6.6, 116.93]         # L_arm_mg: knee pivot eye
-WRIST_KNEE_PIN = [9.5, -64.0, 10.0]          # L_wrist_mg: knee pin (coaxial with the knee servo shaft)
-WRIST_FOOT_EYE = [132.01, -40.0, 12.49]      # L_wrist_mg: foot mount hole
-# servo body centres (MG996R mounting-ear centre), for the mass model
-SERVO_CENTERS = {"hip": ("L_arm_joint_mg", [10.0, 0.0, 20.25]), "femur": ("L_arm_mg", [10.0, 6.6, 20.25]),
-                 "tibia": ("L_wrist_mg", [20.25, -40.0, 10.0])}
+def _arc(mesh):
+    """Centre (x, z) and radius of the foot tip's rolling arc: circle through its lower outline."""
+    P = mesh.vertices[:, [0, 2]]
+    h = P[ConvexHull(P).vertices]
+    h = h[h[:, 1] < mesh.bounds[:, 2].mean()]
+    cx, cz, k = np.linalg.lstsq(np.c_[2 * h, np.ones(len(h))], (h ** 2).sum(1), rcond=None)[0]
+    return np.array([cx, cz]), math.sqrt(k + cx * cx + cz * cz)
 
 
-def place(M_fit, anchor_part, anchor_link_m, down_from=None):
-    """Pose (4x4, metres) of a part in a sim link frame.
-
-    M_fit: part -> URDF assembly (mm). The part keeps its fitted orientation (rotated into the sim
-    frame) and is translated so `anchor_part` lands on `anchor_link_m` -- except the lateral (sim x)
-    coordinate, which keeps the fitted value. `down_from`=(p0, p1) part points that must end up
-    vertically aligned (p1 straight below p0): removes the small tilt of the web model's placement.
-    """
-    R = R_URDF @ M_fit[:3, :3]
-    if down_from is not None:
-        v = R @ (np.subtract(down_from[1], down_from[0]))
-        ang = math.atan2(v[1], -v[2])                     # tilt in the sagittal (y-z) plane
-        R = np.array([[1, 0, 0], [0, math.cos(-ang), -math.sin(-ang)], [0, math.sin(-ang), math.cos(-ang)]]) @ R
-    a = R @ np.array(anchor_part, float) / 1000
-    lateral = (R_URDF @ (M_fit[:3, :3] @ np.array(anchor_part, float) + M_fit[:3, 3]))[0] / 1000
-    target = np.array(anchor_link_m, float); target[0] += lateral
-    return T(R, target - a)
+def measure(ref):
+    """Per leg: hip axis (y, z), femur and knee axes (x, z), foot arc centre (x, y, z) and radius."""
+    legs = {}
+    for lg in LEGS:
+        gear = {g: m.bounds.mean(0) for g in ("Shoulder Joint Servo", "Upper Leg", "Lower Leg")
+                for p, m in ref.leg_solids(lg, "Gear") if any(g in s for s in p)}
+        pin = [m.bounds.mean(0) for p, m in ref.leg_solids(lg, "Shoulder_Joint_Ball_Bearing_Pin")
+               if any("SHOULDER PIN" in s for s in p)][0]
+        (_, foot), = ref.leg_solids(lg, "Foot_Tip")
+        centre, radius = _arc(foot)
+        legs[lg] = {"hip": (gear["Shoulder Joint Servo"][1:] + pin[1:]) / 2, "femur": gear["Upper Leg"][[0, 2]],
+                    "knee": gear["Lower Leg"][[0, 2]], "foot": np.array([centre[0], foot.bounds[:, 1].mean(), centre[1]]),
+                    "foot_radius": radius}
+    return legs
 
 
-def mass_props(mesh, pose):
-    """20%-infill PLA mass (kg), COM and inertia about the COM (kg m^2) in the link frame."""
+def skeleton(legs):
+    """The firmware_gait skeleton constants (mm), averaged over the four legs."""
+    mean = lambda f, lgs=LEGS: float(np.mean([f(legs[lg]) for lg in lgs]))
+    side = {"fl": 1, "rl": 1, "fr": -1, "rr": -1}
+    return {
+        "COXA": float(np.mean([side[lg] * (m["foot"][1] - m["hip"][0]) for lg, m in legs.items()])),
+        "COXA_OFFSET": mean(lambda m: m["hip"][1] - m["femur"][1]),
+        "FEMUR": mean(lambda m: np.linalg.norm(m["femur"] - m["knee"])),
+        "TIBIA": mean(lambda m: np.linalg.norm(m["knee"] - m["foot"][[0, 2]])),
+        "FOOT_RADIUS": mean(lambda m: m["foot_radius"]),
+        "BODY_L": mean(lambda m: m["femur"][0], ("fl", "fr")) - mean(lambda m: m["femur"][0], ("rl", "rr")),
+        "BODY_W": mean(lambda m: m["hip"][0], ("fl", "rl")) - mean(lambda m: m["hip"][0], ("fr", "rr")),
+    }
+
+
+def frames(legs):
+    """Sim link frames in the assembly (4x4, mm): base, and the front-left leg's links at the assembly pose."""
+    Rb = R_ASM.T
+    pitch = lambda a: Rb @ _rot((-1.0, 0.0, 0.0), a)   # femur/tibia hinge: + swings the leg forward
+    xs = [m["femur"][0] for m in legs.values()]
+    ys = [m["hip"][0] for m in legs.values()]
+    base = T(Rb, [(max(xs) + min(xs)) / 2, (max(ys) + min(ys)) / 2, np.mean([m["hip"][1] for m in legs.values()])])
+    m = legs["fl"]
+    leg_y = m["foot"][1]   # the leg plane
+    (fx, fz), (kx, kz), (px, _, pz) = m["femur"], m["knee"], m["foot"]
+    # the assembly's legs hang straight down (hip angle 0); femur/tibia angles from the axes
+    t2, t23 = math.atan2(kx - fx, fz - kz), math.atan2(px - kx, kz - pz)
+    out = {"base": base, "hip": T(Rb, [fx, m["hip"][0], m["hip"][1]]),
+           "femur": T(pitch(t2), [fx, leg_y, fz]), "tibia": T(pitch(t23), [kx, leg_y, kz])}
+    print(f"assembly pose: femur {math.degrees(t2):.1f} deg, knee {math.degrees(t23 - t2):.1f} deg")
+    return out
+
+
+def in_frame(F, P):
+    """Assembly pose P (mm) -> pose in the frame F, metres."""
+    M = np.linalg.inv(F) @ P
+    M[:3, 3] /= 1000
+    return M
+
+
+def snap_onto(src, M, tgt):
+    """`M` with its rotation snapped to the axes, the part's footprint centred on `tgt` and bottoms level."""
+    R = min(ROTS, key=lambda Q: np.linalg.norm(Q - M[:3, :3]))
+    v = src.vertices @ R.T
+    t = tgt.bounds.mean(0) - (v.min(0) + v.max(0)) / 2
+    t[2] = tgt.bounds[0, 2] - v[:, 2].min()
+    return T(R, t)
+
+
+def mass_props(mesh, pose, infill):
+    """PLA mass (kg), COM and inertia about the COM (kg m^2) in the link frame."""
     V, A = abs(mesh.volume) / 1000, mesh.area / 100                     # cm3, cm2
     shell = min(V, A * SHELL_CM / 2)
-    mass = PLA_DENSITY * (shell + INFILL * (V - shell)) / 1000           # kg
-    m = mesh.copy(); m.apply_transform(T(np.eye(3) * 0.001))             # mm -> m
+    mass = PLA_DENSITY * (shell + infill * (V - shell)) / 1000           # kg
+    m = mesh.copy(); m.apply_scale(0.001)
     m.density = mass / abs(m.volume)
     R, t = pose[:3, :3], pose[:3, 3]
-    com = R @ m.center_mass + t
-    I = R @ m.moment_inertia @ R.T                                       # about COM
-    return mass, com, I
+    return mass, R @ m.center_mass + t, R @ m.moment_inertia @ R.T
+
+
+def mirrored(pose):
+    """Pose of a mirrored mesh on the mirrored link (left <-> right)."""
+    return T(MIRROR_X) @ pose @ T(MIRROR_X)
 
 
 def main():
-    zf = zipfile.ZipFile(WEB_ZIP)
-    parts, used = [], set()
+    ref = Reference()
+    legs = measure(ref)
+    sk = skeleton(legs)
+    print("skeleton (mm)  measured  firmware_gait")
+    for k, v in sk.items():
+        print(f"  {k:12s} {v:8.2f}  {getattr(fg, k) * 1000:8.2f}")
+    F = frames(legs)
+    parts = []   # (mesh name, sim body, pose (m), source mesh, infill)
 
-    # --- left front leg: fit each part onto its web counterpart ------------------------------
-    fits = {}
-    for part, web in (("L_arm_joint_mg", "lshoulder"), ("L_arm_mg", "larm"), ("L_arm_cover", "larm_cover"),
-                      ("L_wrist_mg", "lfoot"), ("foot", "foot")):
-        fits[part], rms = fit(load(part), web_mesh(web, zf))
-        print(f"fit {part:16s} -> {web:11s} rms {rms:.2f} mm")
-
-    # leg poses in their sim link frames (front-left; x = left, y = rear, z = up)
-    leg = {}
-    leg["L_arm_joint_mg"] = ("hip", place(fits["L_arm_joint_mg"], ARM_JOINT_FEMUR_DISC, [0, 0, -COXA_OFFSET]))
-    # the hip link frame sits on the hip axis; its disc anchor's lateral offset is relative to the
-    # fitted hip-axis line, so re-express the lateral coordinate relative to the hip origin
-    hip_axis_y = (fits["L_arm_joint_mg"][:3, :3] @ [10.0, 0, 9.5] + fits["L_arm_joint_mg"][:3, 3])[1] / 1000
-    leg["L_arm_joint_mg"][1][0, 3] -= hip_axis_y
-    leg_plane_y = (_LEG[1]) / 1000  # web model leg plane (y = 94 mm)
-    arm = place(fits["L_arm_mg"], ARM_FEMUR_SHAFT, [0, 0, 0], down_from=(ARM_FEMUR_SHAFT, ARM_KNEE_EYE))
-    arm[0, 3] -= leg_plane_y
-    leg["L_arm_mg"] = ("femur", arm)
-    # cover rides rigidly on the arm (same web link -> relative pose from the fit)
-    rel = np.linalg.inv(fits["L_arm_mg"]) @ fits["L_arm_cover"]
-    leg["L_arm_cover"] = ("femur", arm @ T(np.eye(3), [0, 0, 0]) @ _mm(rel))
-    wrist = place(fits["L_wrist_mg"], WRIST_KNEE_PIN, [0, 0, 0], down_from=(WRIST_KNEE_PIN, WRIST_FOOT_EYE))
-    wrist[0, 3] -= leg_plane_y
-    leg["L_wrist_mg"] = ("tibia", wrist)
-    rel = np.linalg.inv(fits["L_wrist_mg"]) @ fits["foot"]
-    leg["foot"] = ("tibia", wrist @ _mm(rel))
-
-    # --- right side: R_ parts are mirror images of L_ parts --------------------------------------
-    right = {}
-    for lpart, (link, pose) in leg.items():
-        rpart = lpart.replace("L_", "R_", 1) if lpart.startswith("L_") else lpart
-        G, rms = fit(load(rpart), mirrored(load(lpart)))   # R part -> mirrored L part coords
-        right[rpart] = (link, T(MIRROR_X) @ pose @ _mirror_part(G))   # mirror(left pose of the mirrored part)
-        print(f"mirror {rpart:16s} rms {rms:.2f} mm")
-
+    # --- front-left leg --------------------------------------------------------------------------
+    leg = []
+    for stl, link, solid in LEG_PARTS:
+        M, rms = fit(load(stl), ref.find(solid, within="FL Leg"))
+        print(f"fit {stl:40s} -> {solid:32s} rms {rms:.2f} mm")
+        leg.append((stl, link, in_frame(F[link], M)))
+    # robjk shoulder: robjk's assembly -> Kubina's, by the limb shell, then turned about the femur axis
+    B, rms = fit(ref.find("Limb_Top_Shell", "robjk_limb"), ref.find("Limb_Top_Shell", within="FL Leg"))
+    print(f"fit robjk limb shell -> Limb_Top_Shell rms {rms:.2f} mm")
+    cap = ref.find("Shoulder_Joint_Servohorn_Cap", "robjk_limb")
+    axis_pt = ref.find("Gear003", "robjk_limb").bounds.mean(0)
+    arm = B[:3, :3] @ (cap.bounds.mean(0) - axis_pt)
+    arm[1] = 0                                   # femur axis = assembly y
+    turn = math.atan2(arm[0], arm[2])            # arm -> straight up
+    Rt = _rot((0.0, 1.0, 0.0), -turn)
+    pivot = B[:3, :3] @ axis_pt + B[:3, 3]
+    A = T(Rt, pivot - Rt @ pivot) @ B
+    for stl, solid in ROBJK_SHOULDER:
+        M, rms = fit(load(stl), ref.find(solid, "robjk_limb"))
+        print(f"fit {stl:40s} -> robjk {solid:26s} rms {rms:.2f} mm")
+        leg.append((stl, "hip", in_frame(F["hip"], A @ M)))
     for lg in ("fl", "rl", "fr", "rr"):
-        for name, (link, pose) in (leg if LEG_SIDE[lg] > 0 else right).items():
-            parts.append({"mesh": name, "body": f"{lg}_{link}", "pose": pose})
+        for stl, link, pose in leg:
+            right = fg.LEG_SIDE[lg] < 0
+            name = stl.replace(" ", "")
+            parts.append((f"{name}_mirror" if right else name, f"{lg}_{link}", mirrored(pose) if right else pose,
+                          stl, INFILL))
+
+    # --- servos: one MG996R mesh, fitted onto the assembly's three --------------------------------
+    servo = trimesh.util.concatenate([ref.find(s, within="FL Leg") for s in LEG_SERVOS["hip"]])
+    servo.apply_translation(-servo.bounds.mean(0))
+    servos = []
+    for link, solids in LEG_SERVOS.items():
+        M, rms = fit(servo, trimesh.util.concatenate([ref.find(s, within="FL Leg") for s in solids]))
+        print(f"fit MG996R -> {solids[0]} rms {rms:.2f} mm")
+        servos.append((link, in_frame(F[link], M)))
 
     # --- body ------------------------------------------------------------------------------------
-    body = trimesh.util.concatenate([web_mesh(n, zf) for n in ("mainbody", "frontpart", "backpart")])
-    c = body.triangles_center
-    sel = {"front": c[:, 0] > 20, "rear": c[:, 0] < -20, "top": c[:, 2] > 0, "bottom": c[:, 2] < 0,
-           "front_cover": c[:, 0] > 60, "rear_cover": c[:, 0] < -60}
-    jobs = [("I_shoulder_mg", "front"), ("I_shoulder_mg", "rear"), ("O_shoulder", "front"),
-            ("non-mega_T_cover_mg", "top"), ("non-mega_B_cover_mg", "bottom"), ("F_cover", "front_cover"),
-            ("R_cover", "rear_cover")]
-    bfit = {}
-    for part, s in jobs:
-        bfit[(part, s)], rms = fit(load(part), body.submesh([np.flatnonzero(sel[s])], append=True))
-        print(f"fit {part:20s} ({s:11s}) rms {rms:.2f} mm")
-    # body frame origin: midway between the front and rear hip bearings, at hip-axis height
-    seat = lambda M: M[:3, :3] @ np.array([16.0, 2.0, 26.0]) + M[:3, 3]   # I_shoulder bearing seat
-    origin = (seat(bfit[("I_shoulder_mg", "front")]) + seat(bfit[("I_shoulder_mg", "rear")])) / 2
-    origin[1] = 0.0
-    to_base = lambda M: T(R_URDF) @ T(np.eye(3), -origin / 1000) @ _mm(M)
-    for (part, s), M in bfit.items():
-        parts.append({"mesh": part, "body": "base", "pose": to_base(M)})
-    # rear outer plate: front one turned 180 degrees about z (its own fit lands inside the body)
-    parts.append({"mesh": "O_shoulder", "body": "base",
-                  "pose": T(rpy(0, 0, math.pi)) @ to_base(bfit[("O_shoulder", "front")])})
-    # hidden parts whose fit is ambiguous (flat plates): mass only, lumped at the body centre
-    hidden = ["non-mega_L_side_plate", "R_side_plate", "plate", "L_ultra_sonic", "R_ultra_sonic"]
+    body = {}
+    for stl, solid in BODY_PARTS:
+        M, rms = fit(load(stl), ref.find(solid))
+        print(f"fit {stl:40s} -> {solid:32s} rms {rms:.2f} mm")
+        body.setdefault(stl, M)
+        parts.append((stl, "base", in_frame(F["base"], M), stl, HULL_INFILL if stl.startswith(HULL) else INFILL))
+    stl, solid = PLATE
+    M, rms = fit(load(stl), ref.find(solid))
+    M = snap_onto(load(stl), M, ref.find(solid))
+    print(f"fit {stl:40s} -> {solid:32s} rms {rms:.2f} mm (outline only, snapped)")
+    parts.append((stl, "base", in_frame(F["base"], M), stl, INFILL))
+    plate, plate_solid, shell_solid = REAR_PLATE
+    Mp, rms_p = fit(load(plate), ref.find(plate_solid, "robjk_rear"))
+    Ms, rms_s = fit(load("Rear_Cover_Shell_Medium"), ref.find(shell_solid, "robjk_rear"))
+    print(f"fit {plate} via robjk rear assembly rms {rms_p:.2f} / {rms_s:.2f} mm")
+    M = body["Rear_Cover_Shell_Medium"] @ np.linalg.inv(Ms) @ Mp
+    parts.append((plate, "base", in_frame(F["base"], M), plate, HULL_INFILL))
 
-    # --- mass properties + copy meshes -------------------------------------------------------------
-    out = {"parts": [], "hidden": [], "servo_centers": {}, "base_box": None}
-    for link, (part, pt) in SERVO_CENTERS.items():   # left-leg link frames; mirror x for right legs
-        out["servo_centers"][link] = (leg[part][1] @ np.r_[np.array(pt) / 1000, 1])[:3].tolist()
-    # body collision box: bounds of the placed body shells (covers) in the base frame
-    shells = [p for p in parts if p["body"] == "base" and "cover" in p["mesh"]]
-    pts = np.vstack([trimesh.transformations.transform_points(load(p["mesh"]).vertices / 1000, p["pose"]) for p in shells])
+    # --- mass properties + meshes ------------------------------------------------------------------
+    out = {"parts": [], "servos": [], "hidden": [], "base_box": None}
+    meshes = {}
+    for name, link, pose, stl, infill in parts:
+        mesh = load(stl)
+        if name.endswith("_mirror"):
+            mesh.apply_transform(T(MIRROR_X))   # trimesh keeps the winding consistent
+        meshes[name] = mesh
+        m, com, I = mass_props(mesh, pose, infill)
+        out["parts"].append({"mesh": name, "body": link, "pose": pose.tolist(), "mass": m, "com": com.tolist(),
+                             "inertia": I.tolist()})
+    meshes["MG996R"], meshes["MG996R_mirror"] = servo, servo.copy().apply_transform(T(MIRROR_X))
+    ext = servo.extents / 1000
+    box = np.diag([ext[1] ** 2 + ext[2] ** 2, ext[0] ** 2 + ext[2] ** 2, ext[0] ** 2 + ext[1] ** 2]) / 12
+    for lg in ("fl", "rl", "fr", "rr"):
+        for link, pose in servos:
+            right = fg.LEG_SIDE[lg] < 0
+            pose = mirrored(pose) if right else pose
+            R = pose[:3, :3]
+            out["servos"].append({"mesh": "MG996R_mirror" if right else "MG996R", "body": f"{lg}_{link}",
+                                  "pose": pose.tolist(), "com": pose[:3, 3].tolist(),
+                                  "inertia_per_kg": (R @ box @ R.T).tolist()})
+    for h in HIDDEN:
+        out["hidden"].append({"mesh": h, "body": "base", "mass": mass_props(load(h), np.eye(4), INFILL)[0]})
+    # body collision box: bounds of the placed hull parts in the base frame
+    hull = [p for p in out["parts"] if p["body"] == "base" and p["mesh"].startswith(HULL)]
+    pts = np.vstack([trimesh.transformations.transform_points(meshes[p["mesh"]].vertices / 1000, p["pose"])
+                     for p in hull])
     lo, hi = pts.min(0), pts.max(0)
     out["base_box"] = {"center": ((lo + hi) / 2).tolist(), "half": ((hi - lo) / 2).tolist()}
-    for p in parts:
-        m, com, I = mass_props(load(p["mesh"]), p["pose"])
-        out["parts"].append({"mesh": p["mesh"], "body": p["body"], "pose": p["pose"].tolist(),
-                             "mass": m, "com": com.tolist(), "inertia": I.tolist()})
-        used.add(p["mesh"])
-    for h in hidden:
-        m, _, _ = mass_props(load(h), np.eye(4))
-        out["hidden"].append({"mesh": h, "body": "base", "mass": m})
+
     mesh_dir = os.path.join(HERE, "meshes")
     for f in os.listdir(mesh_dir):
         os.remove(os.path.join(mesh_dir, f))
-    for name in sorted(used):
-        shutil.copy(os.path.join(PRINT_DIR, f"{name}.stl"), os.path.join(mesh_dir, f"{name}.stl"))
+    for name, mesh in meshes.items():
+        mesh.export(os.path.join(mesh_dir, f"{name}.stl"))
     with open(os.path.join(HERE, "print_parts.json"), "w") as f:
         json.dump(out, f, indent=1)
     total = sum(p["mass"] for p in out["parts"]) + sum(h["mass"] for h in out["hidden"])
     print(f"wrote print_parts.json ({len(out['parts'])} placed parts, printed mass {total * 1000:.0f} g)")
-
-
-def _mm(M):
-    """4x4 in mm -> same transform in metres."""
-    M = np.array(M, float).copy(); M[:3, 3] /= 1000
-    return M
-
-
-def _mirror_part(G):
-    """Mesh-coordinate map for a right part: R-part coords -> L-part coords, mirrored (metres)."""
-    return T(MIRROR_X) @ _mm(G)
 
 
 if __name__ == "__main__":

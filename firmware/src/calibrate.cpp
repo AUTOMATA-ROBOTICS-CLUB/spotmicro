@@ -270,7 +270,7 @@ void handle(String line) {
   printState();
 }
 
-#include "wifi/wifi.h"
+#include "wifi.h"
 
 void setup() {
   Serial.begin(115200);
@@ -295,7 +295,7 @@ void setup() {
 
 void loop() {
   udpLoop();
-
+  
   static String line;
   while (Serial.available()) {
     char ch = Serial.read();

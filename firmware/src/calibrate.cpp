@@ -270,6 +270,8 @@ void handle(String line) {
   printState();
 }
 
+#include "wifi.h"
+
 void setup() {
   Serial.begin(115200);
   delay(1500);
@@ -286,9 +288,14 @@ void setup() {
       "\ncalibrate ready (%s) - servos are off until you send a command\n",
       saved ? "table loaded from flash" : "defaults from robot_config.h");
   help();
+
+  // Wifi server start
+  udpBegin();
 }
 
 void loop() {
+  udpLoop();
+  
   static String line;
   while (Serial.available()) {
     char ch = Serial.read();

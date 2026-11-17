@@ -295,7 +295,7 @@ void setup() {
 
 void loop() {
   udpLoop();
-  
+
   static String line;
   while (Serial.available()) {
     char ch = Serial.read();

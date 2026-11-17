@@ -10,3 +10,6 @@ __pycache__/
 .vscode/
 .idea/
 .DS_Store
+
+# PC controller build (firmware/src/pc_controller.cpp)
+firmware/src/pc_controller
